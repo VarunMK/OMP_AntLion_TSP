@@ -1,26 +1,21 @@
 CXX			= g++
-CXXFLAGS	= -std=c++14 -O3 -Wall -pedantic #-faligned-new #-fsanitize=thread #-Waligned-new=none
-INCLUDES	= -I . -I ~/Projects/fastflow
+CXXFLAGS	= -std=c++14 -O3 -Wall -pedantic -Xpreprocessor -fopenmp -lomp -L/opt/homebrew/opt/libomp/lib -I/opt/homebrew/opt/libomp/include
 LIBS		= -lpthread
 
-OBJS	= main.cpp TSP.o Environment.o Parameters.o Ant.o AcoCPU.o AcoFF.o
+OBJS	= main.cpp TSP.o Environment.o Parameters.o Ant.o AcoCPU.o AcoOMP.o
 ACOCPU	= acocpu
 ACOGPU	= acogpu
 STATS	= stats
 
 $(ACOCPU): $(OBJS)
-	$(CXX) $(CXXFLAGS) $(INCLUDES) main.cpp -o $(ACOCPU) $(LIBS)
+	$(CXX) $(CXXFLAGS) main.cpp -o $(ACOCPU) $(LIBS)
 
 $(ACOGPU): AcoGPU.cu TSP.cpp
 	nvcc -Xptxas="-v" -O3 -c TSP.cpp -o TSP.o
 	nvcc -Xptxas="-v" -O3 AcoGPU.cu -o $@
 
-
-$(STATS): stats.cpp
-	$(CXX) $(CXXFLAGS) stats.cpp -o $(STATS)
-
 %.o : %.cpp
-	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 .PHONY: clean
 clean:
