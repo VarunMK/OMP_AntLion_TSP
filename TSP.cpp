@@ -28,12 +28,12 @@
 #define UPPER_ROW           "UPPER_ROW"
 
 #define READ(tag, val)   \
-if ( buffer == tag":")   \
-in >> val;           \
+if ( buffer == tag":" )  \
+    in >> val;           \
 else if ( buffer == tag )\
-in >> buffer >> val;
+    in >> buffer >> val;
 
-#define _edges(a, b) edges[a * nCities + b]
+#define _distance(a, b) distanceMatrix[a * nCities + b]
 
 template <typename T>
 struct City {
@@ -46,24 +46,21 @@ template <typename T>
 class TSP {
     
 private:
-    
     uint32_t nCities;
-    std::vector<T> edges;
+    std::vector<T> distanceMatrix;
     std::string name;
     std::string type;
     std::string edgeWeightType;
-    std::string edgeWieghtFormat;
+    std::string edgeWeightFormat;
     std::string nodeCoordType;
     std::string displayDataType;
 
-    void initEdges(const uint32_t size) {
-        edges.resize(size, 0.0);
+    void initDistanceMatrix(const uint32_t size) {
+        distanceMatrix.resize(size, 0.0);
     }
     
-    void readEdgesFromNodes(std::ifstream & in) {
-        
+    void readDistanceMatrixFromNodes(std::ifstream & in) {
         if (TWOD_COORDS == nodeCoordType || nodeCoordType == "") {
-            
             std::vector< City<T> > cities(nCities);
             for (uint32_t i = 0; i < nCities; ++i) {
                 in >> cities[i].n;
@@ -71,60 +68,55 @@ private:
                 in >> cities[i].y;
             }
             
-            initEdges(nCities * nCities);
+            initDistanceMatrix(nCities * nCities);
             
             for (uint32_t i = 0; i < nCities; ++i) {
                 for (uint32_t j = 0; j < nCities; ++j) {
-                    
                     const T xd = cities[i].x - cities[j].x;
                     const T yd = cities[i].y - cities[j].y;
 
-                    if ( edgeWeightType == EUC_2D ) {
-                        _edges(i, j) = round( sqrt(xd * xd + yd * yd) );
-                    } else if ( edgeWeightType == MAN_2D ) {
-                        _edges(i, j) = round( abs(xd) + abs(yd) );
-                    } else if ( edgeWeightType == MAX_2D ) {
-                        _edges(i, j) = std::max( round(abs(xd)), round(abs(yd)) );
-                    } else if ( edgeWeightType == ATT ) {
-                        const T rij = sqrt( (xd * xd + yd * yd) / 10.0 );
-                        const T tij = round( rij );
-                        _edges(i, j) = tij + (tij < rij);
+                    if (edgeWeightType == EUC_2D) {
+                        _distance(i, j) = round(sqrt(xd * xd + yd * yd));
+                    } else if (edgeWeightType == MAN_2D) {
+                        _distance(i, j) = round(abs(xd) + abs(yd));
+                    } else if (edgeWeightType == MAX_2D) {
+                        _distance(i, j) = std::max(round(abs(xd)), round(abs(yd)));
+                    } else if (edgeWeightType == ATT) {
+                        const T rij = sqrt((xd * xd + yd * yd) / 10.0);
+                        const T tij = round(rij);
+                        _distance(i, j) = tij + (tij < rij);
                     } else {
                         std::cout << EDGE_WEIGHT_TYPE << ": " << edgeWeightType << " not supported!" << std::endl;
                         exit(EXIT_EDGE_WEIGHT_TYPE);
                     }
                 }
             }
-
         } else {
-            std::cout << NODE_COORD_TYPE << ": " << nodeCoordType <<" not supported!" << std::endl;
+            std::cout << NODE_COORD_TYPE << ": " << nodeCoordType << " not supported!" << std::endl;
             exit(EXIT_NODE_COORD_TYPE);
         }
     }
     
-    void readEdgesFromEdges(std::ifstream &in) {
+    void readDistanceMatrixFromEdges(std::ifstream &in) {
+        initDistanceMatrix(nCities * nCities);
         
-        initEdges(nCities * nCities);
-        
-        if ( edgeWieghtFormat == FULL_MATRIX ) {
-            for (uint32_t i = 0; i < nCities; ++i){
+        if (edgeWeightFormat == FULL_MATRIX) {
+            for (uint32_t i = 0; i < nCities; ++i) {
                 for (uint32_t j = 0; j < nCities; ++j) {
-                    in >> _edges(i, j);
+                    in >> _distance(i, j);
                 }
             }
-        } else if ( edgeWieghtFormat == UPPER_ROW ) {
-            
-            //Reading upper triangular matrix without diagonal
-            for (uint32_t i = 0; i < nCities; ++i){
-                _edges(i, i) = 0.0f;
+        } else if (edgeWeightFormat == UPPER_ROW) {
+            // Reading upper triangular matrix without diagonal
+            for (uint32_t i = 0; i < nCities; ++i) {
+                _distance(i, i) = 0.0f;
                 for (uint32_t j = i + 1; j < nCities; ++j) {
-                    in >> _edges(i, j);
-                    _edges(j, i) = _edges(i, j);
+                    in >> _distance(i, j);
+                    _distance(j, i) = _distance(i, j);
                 }
             }
-            
         } else {
-            std::cout << EDGE_WEIGHT_FORMAT << ": " << edgeWieghtFormat << " not supported!" << std::endl;
+            std::cout << EDGE_WEIGHT_FORMAT << ": " << edgeWeightFormat << " not supported!" << std::endl;
             exit(EXIT_EDGE_WEIGHT_FORMAT);
         }
     }
@@ -143,20 +135,18 @@ public:
         in >> buffer;
         
         while ( !in.eof() ) {
-            
             READ(NAME, name)
             else READ(TYPE,               type             )
             else READ(DIMENSION,          nCities          )
             else READ(EDGE_WEIGHT_TYPE,   edgeWeightType   )
-            else READ(EDGE_WEIGHT_FORMAT, edgeWieghtFormat )
+            else READ(EDGE_WEIGHT_FORMAT, edgeWeightFormat )
             else READ(NODE_COORD_TYPE,    nodeCoordType    )
             else READ(DISPLAY_DATA_TYPE,  displayDataType  )
-            else if ( buffer == NODE_COORD_SECTION ) {
-                readEdgesFromNodes(in);
-            } else if ( buffer == EDGE_WEIGHT_SECTION) {
-                readEdgesFromEdges(in);
+            else if (buffer == NODE_COORD_SECTION) {
+                readDistanceMatrixFromNodes(in);
+            } else if (buffer == EDGE_WEIGHT_SECTION) {
+                readDistanceMatrixFromEdges(in);
             }
-            
             in >> buffer;
         }
         
@@ -166,13 +156,11 @@ public:
 
     template <typename P>
     bool checkTour(const P path) const {
-        
         bool success = true;
         std::vector<uint32_t> duplicate(nCities, 0);
 
         duplicate[path[0]] += 1;
         for (uint32_t i = 0; i < nCities - 1; ++i) {
-
             const uint32_t from = path[i];
             const uint32_t to   = path[i + 1];
             duplicate[to] += 1;
@@ -185,8 +173,8 @@ public:
                 std::cout << "Illegal TO city in position: " << i + 1 << "!"<< std::endl;
                 success = false;
             }
-            if (success == true && _edges(from, to) <= 0) {
-                std::cout << "Path impossibile: " << from << " -> " << to << std::endl;
+            if (success == true && _distance(from, to) <= 0) {
+                std::cout << "Path impossible: " << from << " -> " << to << std::endl;
                 success = false;
             }
         }
@@ -203,49 +191,44 @@ public:
 
     template <typename P>
     T calcTourLength(const P path) const {
-        
         T totalLength = 0;
         for (uint32_t i = 0; i < nCities - 1; ++i) {
             const uint32_t from = path[i];
             const uint32_t to   = path[i + 1];
-            
-            totalLength += _edges(from, to);
+            totalLength += _distance(from, to);
         }
-        
         const uint32_t from = path[nCities - 1];
         const uint32_t to   = path[0];
-        totalLength += _edges(from, to);
-        
+        totalLength += _distance(from, to);
         return totalLength;
     }
     
     void printInfo() const {
         std::cout << "*****  " << name << "  *****"       << std::endl
-        << TYPE << ":               " << type             << std::endl
-        << DIMENSION << ":          " << nCities          << std::endl
-        << EDGE_WEIGHT_TYPE << ":   " << edgeWeightType   << std::endl
-        << EDGE_WEIGHT_FORMAT << ": " << edgeWieghtFormat << std::endl
-        << DISPLAY_DATA_TYPE << ":  " << displayDataType  << std::endl;
+                  << TYPE << ":               " << type             << std::endl
+                  << DIMENSION << ":          " << nCities          << std::endl
+                  << EDGE_WEIGHT_TYPE << ":   " << edgeWeightType   << std::endl
+                  << EDGE_WEIGHT_FORMAT << ": " << edgeWeightFormat << std::endl
+                  << DISPLAY_DATA_TYPE << ":  " << displayDataType  << std::endl;
     }
     
-    void printEdges() const {
-        printMatrixV("Edges", edges, nCities, nCities, 2);
+    void printDistanceMatrix() const {
+        printMatrixV("DistanceMatrix", distanceMatrix, nCities, nCities, 2);
     }
     
-
-    const std::vector<T> & getEdges() const {
-        return edges;
+    const std::vector<T> & getDistanceMatrix() const {
+        return distanceMatrix;
     }
 
     uint32_t getNCities() const {
         return nCities;
     }
 
-    const std::string & getName() const{
+    const std::string & getName() const {
         return name;
     }
     
-    ~TSP(){}
+    ~TSP() {}
 };
 
 #endif

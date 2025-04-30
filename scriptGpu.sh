@@ -23,8 +23,6 @@ nBlocks=(
     8
     16
     32
-    64
-    128
 )
 
 nWarpsPerBlock=(
@@ -32,8 +30,6 @@ nWarpsPerBlock=(
     2
     4
     8
-    16
-    32
 )
 
 
@@ -47,7 +43,7 @@ do
             for k in `seq 1 10`;
             do
     #       ./acogpu file.tsp           alpha   beta    q   rho maxEpoch    threadsPerBlock nBlocks nWarpsPerBlock
-            ./acogpu $tspBase$problem   1       2       1   0.5 10          128             $i      $j
+            ./acogpu $tspBase$problem   1.5     2.8     1   0.5  30          128             $i      $j
             done
         done
     done
