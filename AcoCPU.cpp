@@ -14,122 +14,115 @@ template <typename T, typename D>
 class AcoCPU {
     
 private:
-    const Parameters<T> & params;
-    Environment<T, D>   & env;
-    std::vector< Ant<T> > ants;
+    const Parameters<T> & config;
+    Environment<T, D>   & context;
+    std::vector< Ant<T> > antGroup;
     
-    void initEta(std::vector<T> & eta, 
-                 const std::vector<T> & edges)
+    void computeEta(std::vector<T> & etaVals, const std::vector<T> & edgeList)
     {
-        auto bEta   = eta.begin();
-        auto bEdges = edges.begin();
-        while ( bEta != eta.end() ) {
-            T & etaVal = *(bEta++);
-            const T & edgeVal = *(bEdges++);
-            
+        auto etaIter = etaVals.begin();
+        auto edgeIter = edgeList.begin();
+        while (etaIter != etaVals.end()) {
+            T & etaVal = *(etaIter++);
+            const T & edgeVal = *(edgeIter++);
             etaVal = (edgeVal == 0.0 ? 0.0 : 1.0 / edgeVal);
         }
     }
 
-    void calcFitness(std::vector<T> & fitness,
-                     const std::vector<T> & pheromone,
-                     const std::vector<T> & eta,
-                     const T alpha,
-                     const T beta)
+    void computeFitness(std::vector<T> & fitnessVec,
+                        const std::vector<T> & pheromoneVec,
+                        const std::vector<T> & etaVec,
+                        const T alphaVal,
+                        const T betaVal)
     {
-        auto bFitness   = fitness.begin();
-        auto bPheromone = pheromone.begin();
-        auto bEta       = eta.begin();
+        auto fitIter = fitnessVec.begin();
+        auto pherIter = pheromoneVec.begin();
+        auto etaIter = etaVec.begin();
 
-        while ( bFitness != fitness.end() ) {
-            T & fitVal = *(bFitness++);
-            const T & pheromoneVal = *(bPheromone++);
-            const T & etaVal = *(bEta++);
-            fitVal = pow(pheromoneVal, alpha) * pow(etaVal, beta);
+        while (fitIter != fitnessVec.end()) {
+            T & fit = *(fitIter++);
+            const T & pher = *(pherIter++);
+            const T & eta = *(etaIter++);
+            fit = pow(pher, alphaVal) * pow(eta, betaVal);
         }
     }
     
-    void calcTour(const std::vector<T> & fitness,
-                  const std::vector<T> & edges)
+    void generateTours(const std::vector<T> & fitValues,
+                       const std::vector<T> & graph)
     {
-        for (Ant<T> & ant : ants) {
-            ant.constructTour(fitness, edges);
+        for (Ant<T> & agent : antGroup) {
+            agent.constructTour(fitValues, graph);
         }
     }
     
-    void updateBestTour(std::vector<uint32_t> & bestTour,
-                        T & bestTourLength)
+    void recordBestTour(std::vector<uint32_t> & pathResult,
+                        T & pathLength)
     {
-        const Ant<T> & bestAnt = *std::min_element(ants.begin(), ants.end());
-        std::copy ( bestAnt.getTabu().begin(), bestAnt.getTabu().end(), bestTour.begin() );
-        bestTourLength = bestAnt.getTourLength();
+        const Ant<T> & topAnt = *std::min_element(antGroup.begin(), antGroup.end());
+        std::copy(topAnt.getTabu().begin(), topAnt.getTabu().end(), pathResult.begin());
+        pathLength = topAnt.getTourLength();
     }
      
-    void updateDelta(std::vector<D> & delta,
-                     const uint32_t nCities,
-                     const T q)
+    void computeDelta(std::vector<D> & deltaVec,
+                      const uint32_t cityCount,
+                      const T qParam)
     {
-        for (T & d : delta) {
+        for (T & d : deltaVec) {
             d = 0.0;
         }
 
-        for (Ant<T> & ant : ants) {
+        for (Ant<T> & agent : antGroup) {
+            const T tauVal = qParam / agent.getTourLength();
+            auto walkIter = agent.getTabu().begin();
+            const auto startIter = walkIter;
 
-            const T tau = q / ant.getTourLength();
-
-            auto bTabu = ant.getTabu().begin();
-            const auto constbTabu = bTabu;
-
-            while ( bTabu != ant.getTabu().end() - 1) {
-                const uint32_t from = *(bTabu++);
-                const uint32_t to   = *(bTabu);
-                delta[from * nCities + to] += tau;
-                delta[to * nCities + from] += tau;
+            while (walkIter != agent.getTabu().end() - 1) {
+                const uint32_t fromCity = *(walkIter++);
+                const uint32_t toCity   = *(walkIter);
+                deltaVec[fromCity * cityCount + toCity] += tauVal;
+                deltaVec[toCity * cityCount + fromCity] += tauVal;
             }
-            const uint32_t from = *(bTabu);
-            const uint32_t to   = *(constbTabu);
-            delta[from * nCities + to] += tau;
-            delta[to * nCities + from] += tau;
+            const uint32_t fromCity = *(walkIter);
+            const uint32_t toCity   = *(startIter);
+            deltaVec[fromCity * cityCount + toCity] += tauVal;
+            deltaVec[toCity * cityCount + fromCity] += tauVal;
         }
     }
     
-    void updatePheromone(std::vector<T> & pheromone,
-                         const std::vector<D> & delta,
-                        const T rho)
+    void updatePheromones(std::vector<T> & pheromoneMap,
+                          const std::vector<D> & deltaMap,
+                          const T decayFactor)
     {
-        auto bPheromone = pheromone.begin();
-        auto bDelta     = delta.begin();
+        auto pherIter = pheromoneMap.begin();
+        auto deltaIter = deltaMap.begin();
 
-        while ( bPheromone != pheromone.end() ) {
-            T & pheromoneVal   = *(bPheromone++);
-            const T & deltaVal = *(bDelta++);
-
-            pheromoneVal = pheromoneVal * rho + deltaVal;
+        while (pherIter != pheromoneMap.end()) {
+            T & pherVal = *(pherIter++);
+            const T & deltaVal = *(deltaIter++);
+            pherVal = pherVal * decayFactor + deltaVal;
         }
     }
     
 public:
     
-    AcoCPU(const Parameters<T> & params, Environment<T, D> & env):
-    params(params),
-    env   (env),
-    ants  (env.nAnts, Ant<T>(env.nCities))
+    AcoCPU(const Parameters<T> & configRef, Environment<T, D> & ctxRef)
+        : config(configRef), context(ctxRef), antGroup(ctxRef.nAnts, Ant<T>(ctxRef.nCities))
     {
-        initEta(env.eta, env.edges);
+        computeEta(context.eta, context.edges);
     }
 
     void solve() {
-        uint32_t epoch = 0;
+        uint32_t currentEpoch = 0;
         do {
-            calcFitness    (env.fitness, env.pheromone, env.eta, params.alpha, params.beta);
-            calcTour       (env.fitness, env.edges);
-            updateBestTour (env.bestTour, env.bestTourLength);
-            updateDelta    (env.delta, env.nCities, params.q);
-            updatePheromone(env.pheromone, env.delta, params.rho);
-        } while ( ++epoch < params.maxEpoch );
+            computeFitness    (context.fitness, context.pheromone, context.eta, config.alpha, config.beta);
+            generateTours     (context.fitness, context.edges);
+            recordBestTour    (context.bestTour, context.bestTourLength);
+            computeDelta      (context.delta, context.nCities, config.q);
+            updatePheromones  (context.pheromone, context.delta, config.rho);
+        } while (++currentEpoch < config.maxEpoch);
     }
     
-    ~AcoCPU(){}
+    ~AcoCPU() {}
 };
 
 #endif

@@ -13,108 +13,106 @@ class Ant {
 
 private:
     
-    const uint32_t nCities;
-    std::vector<uint32_t> tabu;
-    std::vector<uint8_t> visited;
-    std::vector<T> p;
-    T tourLength;
+    const uint32_t totalCities;
+    std::vector<uint32_t> pathMemory;
+    std::vector<uint8_t> cityStatus;
+    std::vector<T> cumulativeProb;
+    T pathCost;
 
-    T nextRandom() {
-        static thread_local std::mt19937 generator(randomSeed);
-        static thread_local std::uniform_real_distribution<T> distribution(0.0f, 1.0f);
-        return distribution(generator);
+    T sampleRandom() {
+        static thread_local std::mt19937 rngEngine(randomSeed);
+        static thread_local std::uniform_real_distribution<T> dist(0.0f, 1.0f);
+        return dist(rngEngine);
     }
 
-    void resetVisited() {
-        for (uint8_t & v : visited) {
-            v = 1;
+    void markAllUnvisited() {
+        for (uint8_t & flag : cityStatus) {
+            flag = 1;
         }
     }
 
-    void constructTabu(const std::vector<T> & fitness) {
-        uint32_t k = nextRandom() * nCities;
-        visited[k] = 0;
-        tabu[0]    = k;
+    void buildTourMemory(const std::vector<T> & desirability) {
+        uint32_t current = sampleRandom() * totalCities;
+        cityStatus[current] = 0;
+        pathMemory[0] = current;
 
-        for (uint32_t s = 1; s < nCities; ++s) {
+        for (uint32_t step = 1; step < totalCities; ++step) {
 
-            T sum = 0.f;
+            T totalWeight = 0.f;
 
-            auto bP       = p.begin();
-            auto bVisited = visited.begin();
-            auto bFitness = fitness.begin() + k * nCities;
+            auto pPtr = cumulativeProb.begin();
+            auto visitPtr = cityStatus.begin();
+            auto fitPtr = desirability.begin() + current * totalCities;
 
-            while ( bP != p.end() ) {
-                auto &pVal       = *(bP++);
-                const auto &visitedVal = *(bVisited++);
-                const auto &fitnessVal = *(bFitness++);
+            while (pPtr != cumulativeProb.end()) {
+                auto & probVal = *(pPtr++);
+                const auto & visitFlag = *(visitPtr++);
+                const auto & fitVal = *(fitPtr++);
 
-                sum += fitnessVal * visitedVal;
-                pVal = sum;
+                totalWeight += fitVal * visitFlag;
+                probVal = totalWeight;
             }
 
-            const T probability = nextRandom() * sum;
+            const T randVal = sampleRandom() * totalWeight;
             
-            uint32_t l = 0;
-            uint32_t r = nCities - 1;
-            while (l < r) {
-                const uint32_t m = (l + r) / 2;
-                if ( p[m] < probability ){
-                    l = m + 1;
+            uint32_t low = 0, high = totalCities - 1;
+            while (low < high) {
+                uint32_t mid = (low + high) / 2;
+                if (cumulativeProb[mid] < randVal) {
+                    low = mid + 1;
                 } else {
-                    r = m;
+                    high = mid;
                 }
             }
 
-            k = l;
-            tabu[s] = k;
-            visited[k] = 0;
+            current = low;
+            pathMemory[step] = current;
+            cityStatus[current] = 0;
         }
     }
 
-    void updateTourLength(const std::vector<T> & edges) {
+    void calculatePathCost(const std::vector<T> & edgeMatrix) {
 
-        tourLength = 0.0;
-        auto bTabu = tabu.begin();
-        const auto constbTabu = bTabu;
+        pathCost = 0.0;
+        auto walker = pathMemory.begin();
+        const auto start = walker;
 
-        while ( bTabu != tabu.end() - 1 ) {
-            const uint32_t from = *(bTabu++);
-            const uint32_t to   = *(bTabu);
-            tourLength += edges[from * nCities + to];
+        while (walker != pathMemory.end() - 1) {
+            const uint32_t src = *(walker++);
+            const uint32_t dst = *(walker);
+            pathCost += edgeMatrix[src * totalCities + dst];
         }
-        const uint32_t from = *(bTabu);
-        const uint32_t to   = *(constbTabu);
-        tourLength += edges[from * nCities + to];
+        const uint32_t src = *(walker);
+        const uint32_t dst = *(start);
+        pathCost += edgeMatrix[src * totalCities + dst];
     }
-
 
 public:
 
-    Ant(const uint32_t nCities):
-    nCities(nCities),
-    tabu(nCities),
-    visited(nCities),
-    p(nCities),
-    tourLength(std::numeric_limits<T>::max()) 
+    Ant(const uint32_t cityCount):
+        totalCities(cityCount),
+        pathMemory(cityCount),
+        cityStatus(cityCount),
+        cumulativeProb(cityCount),
+        pathCost(std::numeric_limits<T>::max()) 
     {}
 
-    void constructTour(const std::vector<T> & fitness, const std::vector<T> & edges) {
-        resetVisited();
-        constructTabu(fitness);
-        updateTourLength(edges);
+    void constructTour(const std::vector<T> & desirability, const std::vector<T> & edgeMatrix) {
+        markAllUnvisited();
+        buildTourMemory(desirability);
+        calculatePathCost(edgeMatrix);
     }
 
     const T getTourLength() const {
-        return tourLength;
+        return pathCost;
     }
 
     const std::vector<uint32_t> & getTabu() const {
-        return tabu;
+        return pathMemory;
     }
 
-    inline bool operator< (const Ant<T> & ant) const {
-        return tourLength < ant.tourLength;
+    inline bool operator< (const Ant<T> & other) const {
+        return pathCost < other.pathCost;
     }
 };
 
