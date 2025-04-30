@@ -3,12 +3,12 @@ CXXFLAGS	= -std=c++14 -O3 -Wall -pedantic -Xpreprocessor -fopenmp -lomp -L/opt/h
 LIBS		= -lpthread
 
 OBJS	= main.cpp TSP.o Environment.o Parameters.o Ant.o AcoCPU.o AcoOMP.o
-ACOCPU	= acocpu
+ACOCPUOMP	= acocpuomp
 ACOGPU	= acogpu
 STATS	= stats
 
-$(ACOCPU): $(OBJS)
-	$(CXX) $(CXXFLAGS) main.cpp -o $(ACOCPU) $(LIBS)
+$(ACOCPUOMP): $(OBJS)
+	$(CXX) $(CXXFLAGS) main.cpp -o $(ACOCPUOMP) $(LIBS)
 
 $(ACOGPU): AcoGPU.cu TSP.cpp
 	nvcc -Xptxas="-v" -O3 -c TSP.cpp -o TSP.o
@@ -19,4 +19,4 @@ $(ACOGPU): AcoGPU.cu TSP.cpp
 
 .PHONY: clean
 clean:
-	$(RM) *.o *~ $(ACOCPU) $(ACOGPU) $(STATS)
+	$(RM) *.o *~ $(ACOCPUOMP) $(ACOGPU) $(STATS)
