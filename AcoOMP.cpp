@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <vector>
 #include <algorithm>
-#include <omp.h> // Include OpenMP header
+#include <omp.h>
 
 #include "Environment.cpp"
 #include "Parameters.cpp"
@@ -12,124 +12,120 @@
 #include "common.hpp"
 
 template <typename T, typename D>
-class AcoOMP
-{
+class AcoOMP {
 
 private:
-    const Parameters<T> &params;
-    Environment<T, D> &env;
-    std::vector<Ant<T>> ants;
+    const Parameters<T> & configRef;
+    Environment<T, D> & contextRef;
+    std::vector<Ant<T>> agentPool;
 
-    void initEta(std::vector<T> &eta, const std::vector<T> &edges)
+    void prepareEta(std::vector<T> & etaVals, const std::vector<T> & edgeVals)
     {
-        const size_t N = eta.size();
+        const size_t size = etaVals.size();
 #pragma omp parallel for
-        for (size_t i = 0; i < N; ++i)
+        for (size_t idx = 0; idx < size; ++idx)
         {
-            eta[i] = (edges[i] == 0.0 ? 0.0 : 1.0 / edges[i]);
+            etaVals[idx] = (edgeVals[idx] == 0.0 ? 0.0 : 1.0 / edgeVals[idx]);
         }
     }
 
-    void calcFitness(std::vector<T> &fitness,
-                     const std::vector<T> &pheromone,
-                     const std::vector<T> &eta,
-                     const T alpha,
-                     const T beta)
+    void evaluateFitness(std::vector<T> & fitnessArray,
+                         const std::vector<T> & pheromoneArray,
+                         const std::vector<T> & etaArray,
+                         const T alphaParam,
+                         const T betaParam)
     {
-        const size_t N = fitness.size();
+        const size_t size = fitnessArray.size();
 #pragma omp parallel for
-        for (size_t i = 0; i < N; ++i)
+        for (size_t i = 0; i < size; ++i)
         {
-            fitness[i] = pow(pheromone[i], alpha) * pow(eta[i], beta);
+            fitnessArray[i] = pow(pheromoneArray[i], alphaParam) * pow(etaArray[i], betaParam);
         }
     }
 
-    void calcTour(const std::vector<T> &fitness,
-                  const std::vector<T> &edges)
+    void performTourConstruction(const std::vector<T> & desirability,
+                                 const std::vector<T> & edgeWeights)
     {
 #pragma omp parallel for
-        for (size_t i = 0; i < ants.size(); ++i)
+        for (size_t i = 0; i < agentPool.size(); ++i)
         {
-            ants[i].constructTour(fitness, edges);
+            agentPool[i].constructTour(desirability, edgeWeights);
         }
     }
 
-    void updateBestTour(std::vector<uint32_t> &bestTour,
-                        T &bestTourLength)
+    void extractBestPath(std::vector<uint32_t> & tourResult,
+                         T & tourLength)
     {
-        const Ant<T> &bestAnt = *std::min_element(ants.begin(), ants.end());
-        std::copy(bestAnt.getTabu().begin(), bestAnt.getTabu().end(), bestTour.begin());
-        bestTourLength = bestAnt.getTourLength();
+        const Ant<T> & optimalAgent = *std::min_element(agentPool.begin(), agentPool.end());
+        std::copy(optimalAgent.getTabu().begin(), optimalAgent.getTabu().end(), tourResult.begin());
+        tourLength = optimalAgent.getTourLength();
     }
 
-    void updateDelta(std::vector<D> &delta,
-                     const uint32_t nCities,
-                     const T q)
+    void generateDeltaMatrix(std::vector<D> & deltaMatrix,
+                             const uint32_t totalCities,
+                             const T qVal)
     {
-// Zero out delta
 #pragma omp parallel for
-        for (size_t i = 0; i < delta.size(); ++i)
+        for (size_t i = 0; i < deltaMatrix.size(); ++i)
         {
-            delta[i] = 0.0;
+            deltaMatrix[i] = 0.0;
         }
 
-// Accumulate tau into delta (critical to avoid data races)
 #pragma omp parallel for
-        for (size_t i = 0; i < ants.size(); ++i)
+        for (size_t k = 0; k < agentPool.size(); ++k)
         {
-            const Ant<T> &ant = ants[i];
-            const T tau = q / ant.getTourLength();
-            const std::vector<uint32_t> &tabu = ant.getTabu();
+            const Ant<T> & antRef = agentPool[k];
+            const T contribution = qVal / antRef.getTourLength();
+            const std::vector<uint32_t> & route = antRef.getTabu();
 
-            for (size_t j = 0; j < tabu.size() - 1; ++j)
+            for (size_t j = 0; j < route.size() - 1; ++j)
             {
-                uint32_t from = tabu[j];
-                uint32_t to = tabu[j + 1];
+                uint32_t src = route[j];
+                uint32_t dst = route[j + 1];
 #pragma omp atomic
-                delta[from * nCities + to] += tau;
+                deltaMatrix[src * totalCities + dst] += contribution;
 #pragma omp atomic
-                delta[to * nCities + from] += tau;
+                deltaMatrix[dst * totalCities + src] += contribution;
             }
 
-            uint32_t from = tabu.back();
-            uint32_t to = tabu.front();
+            uint32_t last = route.back();
+            uint32_t first = route.front();
 #pragma omp atomic
-            delta[from * nCities + to] += tau;
+            deltaMatrix[last * totalCities + first] += contribution;
 #pragma omp atomic
-            delta[to * nCities + from] += tau;
+            deltaMatrix[first * totalCities + last] += contribution;
         }
     }
 
-    void updatePheromone(std::vector<T> &pheromone,
-                         const std::vector<D> &delta,
-                         const T rho)
+    void adjustPheromones(std::vector<T> & pheromoneGrid,
+                          const std::vector<D> & deltaGrid,
+                          const T evaporation)
     {
-        const size_t N = pheromone.size();
+        const size_t len = pheromoneGrid.size();
 #pragma omp parallel for
-        for (size_t i = 0; i < N; ++i)
+        for (size_t i = 0; i < len; ++i)
         {
-            pheromone[i] = pheromone[i] * rho + delta[i];
+            pheromoneGrid[i] = pheromoneGrid[i] * evaporation + deltaGrid[i];
         }
     }
 
 public:
-    AcoOMP(const Parameters<T> &params, Environment<T, D> &env) : params(params),
-                                                                  env(env),
-                                                                  ants(env.nAnts, Ant<T>(env.nCities))
+    AcoOMP(const Parameters<T> & pRef, Environment<T, D> & eRef)
+        : configRef(pRef), contextRef(eRef),
+          agentPool(eRef.nAnts, Ant<T>(eRef.nCities))
     {
-        initEta(env.eta, env.edges);
+        prepareEta(contextRef.eta, contextRef.edges);
     }
 
     void solve()
     {
-        uint32_t epoch = 0;
-        for (int epoch = 0; epoch < params.maxEpoch; epoch++)
+        for (uint32_t cycle = 0; cycle < configRef.maxEpoch; ++cycle)
         {
-            calcFitness(env.fitness, env.pheromone, env.eta, params.alpha, params.beta);
-            calcTour(env.fitness, env.edges);
-            updateBestTour(env.bestTour, env.bestTourLength);
-            updateDelta(env.delta, env.nCities, params.q);
-            updatePheromone(env.pheromone, env.delta, params.rho);
+            evaluateFitness(contextRef.fitness, contextRef.pheromone, contextRef.eta, configRef.alpha, configRef.beta);
+            performTourConstruction(contextRef.fitness, contextRef.edges);
+            extractBestPath(contextRef.bestTour, contextRef.bestTourLength);
+            generateDeltaMatrix(contextRef.delta, contextRef.nCities, configRef.q);
+            adjustPheromones(contextRef.pheromone, contextRef.delta, configRef.rho);
         }
     }
 

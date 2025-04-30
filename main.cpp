@@ -14,13 +14,12 @@
 
 int main(int argc, char *argv[])
 {
-
-    char *path = new char[MAX_LEN];
-    D_TYPE alpha = 1.0;
-    D_TYPE beta = 2.0;
-    D_TYPE q = 1.0;
-    D_TYPE rho = 0.5;
-    uint32_t maxEpoch = 10;
+    char *inputFile = new char[MAX_LEN];
+    D_TYPE paramAlpha = 1.0;
+    D_TYPE paramBeta = 2.0;
+    D_TYPE paramQ = 1.0;
+    D_TYPE paramRho = 0.5;
+    uint32_t numIterations = 10;
 
     if (argc < 7 || argc > 8)
     {
@@ -30,64 +29,69 @@ int main(int argc, char *argv[])
 
     argc--;
     argv++;
-    path = argv[0];
-    alpha = parseArg<D_TYPE>(argv[1]);
-    beta = parseArg<D_TYPE>(argv[2]);
-    q = parseArg<D_TYPE>(argv[3]);
-    rho = parseArg<D_TYPE>(argv[4]);
-    maxEpoch = parseArg<uint32_t>(argv[5]);
+    inputFile = argv[0];
+    paramAlpha = parseArg<D_TYPE>(argv[1]);
+    paramBeta = parseArg<D_TYPE>(argv[2]);
+    paramQ = parseArg<D_TYPE>(argv[3]);
+    paramRho = parseArg<D_TYPE>(argv[4]);
+    numIterations = parseArg<uint32_t>(argv[5]);
 
-    int parallelCondition = 0; // Set to false initially
-
+    int enableOMP = 0;
     if (argc == 7)
     {
-        parallelCondition = parseArg<uint32_t>(argv[6]);
+        enableOMP = parseArg<uint32_t>(argv[6]);
     }
 
-    TSP<D_TYPE> tsp(path);
-    Parameters<D_TYPE> params(alpha, beta, q, rho, maxEpoch);
+    TSP<D_TYPE> tspInstance(inputFile);
+    Parameters<D_TYPE> config(paramAlpha, paramBeta, paramQ, paramRho, numIterations);
 
-    if (!parallelCondition)
+    if (!enableOMP)
     {
-        std::cout << "***** ACO CPU *****" << std::endl;
-        Environment<D_TYPE, D_TYPE> env(tsp.getNCities(), tsp.getNCities(), tsp.getEdges());
-        AcoCPU<D_TYPE, D_TYPE> acocpu(params, env);
+        std::cout << "***** RUNNING ACO ON CPU *****" << std::endl;
+        Environment<D_TYPE, D_TYPE> simulationEnv(tspInstance.getNCities(),
+                                                  tspInstance.getNCities(),
+                                                  tspInstance.getEdges());
+
+        AcoCPU<D_TYPE, D_TYPE> cpuSolver(config, simulationEnv);
 
         startTimer();
-        acocpu.solve();
+        cpuSolver.solve();
         stopAndPrintTimer();
 
-        printMatrixV("bestTour", env.getBestTour(), 1, env.nCities, 0);
-        printResult(tsp.getName(),
+        printMatrixV("bestTour", simulationEnv.getBestTour(), 1, simulationEnv.nCities, 0);
+        printResult(tspInstance.getName(),
                     0,
                     0,
-                    maxEpoch,
+                    numIterations,
                     getTimerMS(),
                     getTimerUS(),
-                    env.getBestTourLength(),
-                    tsp.calcTourLength(env.getBestTour()),
-                    tsp.checkTour(env.getBestTour()));
+                    simulationEnv.getBestTourLength(),
+                    tspInstance.calcTourLength(simulationEnv.getBestTour()),
+                    tspInstance.checkTour(simulationEnv.getBestTour()));
     }
     else
     {
-        std::cout << "***** ACO OMP *****" << std::endl;
-        Environment<D_TYPE, D_TYPE> env(tsp.getNCities(), tsp.getNCities(), tsp.getEdges());
-        AcoOMP<D_TYPE, D_TYPE> acoomp(params, env);
+        std::cout << "***** RUNNING ACO WITH OPENMP *****" << std::endl;
+        Environment<D_TYPE, D_TYPE> simulationEnv(tspInstance.getNCities(),
+                                                  tspInstance.getNCities(),
+                                                  tspInstance.getEdges());
+
+        AcoOMP<D_TYPE, D_TYPE> ompSolver(config, simulationEnv);
 
         startTimer();
-        acoomp.solve();
+        ompSolver.solve();
         stopAndPrintTimer();
 
-        printMatrixV("bestTour", env.getBestTour(), 1, env.nCities, 0);
-        printResult(tsp.getName(),
+        printMatrixV("bestTour", simulationEnv.getBestTour(), 1, simulationEnv.nCities, 0);
+        printResult(tspInstance.getName(),
                     0,
                     0,
-                    maxEpoch,
+                    numIterations,
                     getTimerMS(),
                     getTimerUS(),
-                    env.getBestTourLength(),
-                    tsp.calcTourLength(env.getBestTour()),
-                    tsp.checkTour(env.getBestTour()));
+                    simulationEnv.getBestTourLength(),
+                    tspInstance.calcTourLength(simulationEnv.getBestTour()),
+                    tspInstance.checkTour(simulationEnv.getBestTour()));
     }
 
     return 0;
