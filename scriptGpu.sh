@@ -8,12 +8,10 @@ tspArray=(
     "bays29.tsp"
     "d198.tsp"
     "pcb442.tsp"
-    "rat783.tsp"
     "pr1002.tsp"
-    "pcb1173.tsp"
     "rl1889.tsp"
-    "pr2392.tsp"
-    "fl3795.tsp"
+    "d2103.tsp"
+    "pcb3038.tsp"
 )
 
 nBlocks=(
